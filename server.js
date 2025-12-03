@@ -19,6 +19,12 @@ app.get('/', (req, res) => {
     res.json({ message: 'API de gestion de projets et tâches' });
 });
 
+// Importer les routes
+const authRoutes = require('./routes/auth');
+const projectRoutes = require('./routes/projects');
+app.use('/api/auth', authRoutes);
+app.use('/api/projects', projectRoutes);
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`Serveur démarré sur le port ${PORT}`);
