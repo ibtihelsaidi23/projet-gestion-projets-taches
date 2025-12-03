@@ -1,40 +1,59 @@
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 
-// fonction d'inscription bch yest3mlha l'utilisateur jdid 
+// Creation mte3 compte utilisateur
 exports.register = async (req, res) => {
     try {
-        const { nom, login, motDePasse } = req.body;
+        const { nom, login, motDePasse, role} = req.body;
 
-        // Vérification simple des données
+        // Validation simple ken nom, login w motDePasse mawjoudin 
         if (!nom || !login || !motDePasse) {
-            return res.status(400).json({ error: 'Tous les champs sont obligatoires' });
+            return res.status(400).json({ 
+                error: 'Nom, login et mot de passe sont requis' 
+            });
         }
 
-        // Vérifier si le login existe déjà
+        let roleUtilisateur = role || 'user';
+        
+        // S'assurer que le rôle est valide
+        if (roleUtilisateur !== 'user' && roleUtilisateur !== 'manager') {
+            return res.status(400).json({ 
+                error: 'Le rôle doit être "user" ou "manager"' 
+            });
+        }
+
+        // Vérifier si l'utilisateur mawjoud wala lé 
         const userExists = await User.findOne({ login: login.toLowerCase() });
         if (userExists) {
             return res.status(400).json({ error: 'Ce login est déjà utilisé' });
         }
 
-        // Créer l'utilisateur
+        // HASHER LE MOT DE PASSE 
+        const salt = await bcrypt.genSalt(10);
+        const motDePasseHash = await bcrypt.hash(motDePasse, salt);
+
+        // Créer l'utilisateur avec le mot de passe hashé
         const user = new User({
             nom,
             login: login.toLowerCase(),
-            motDePasse
+            motDePasse: motDePasseHash, // On utilise le hash
+            role:  roleUtilisateur
         });
 
+        // Sauvegarder dans la base de données 
         await user.save();
 
-        // Créer le token
+        // Créer le token mte3 l utilisateur
         const token = jwt.sign(
             { userId: user._id, role: user.role },
             process.env.JWT_SECRET,
             { expiresIn: '7d' }
         );
 
+        // Répondre au client avec les infos de l'utilisateur et le token 
         res.status(201).json({
-            message: 'Compte créé avec succès',
+            message: 'Compte créé avec succès!',
             user: {
                 id: user._id,
                 nom: user.nom,
@@ -49,26 +68,36 @@ exports.register = async (req, res) => {
     }
 };
 
-// Fonction de login bch yest3mlha l'utilisateur eli Andou compte
+// Connexion
 exports.login = async (req, res) => {
     try {
         const { login, motDePasse } = req.body;
 
-        // Vérification simple des données
+        // Validation simple ken login w motDePasse mawjoudin
         if (!login || !motDePasse) {
-            return res.status(400).json({ error: 'Login et mot de passe requis' });
+            return res.status(400).json({ 
+                error: 'Login et mot de passe requis' 
+            });
         }
 
-        // Trouver l'utilisateur
+        // Trouver l'utilisateur bi login
         const user = await User.findOne({ login: login.toLowerCase() });
         
         if (!user) {
             return res.status(401).json({ error: 'Identifiants incorrects' });
         }
 
-        // Vérifier le mot de passe
-        const passwordMatch = await user.comparePassword(motDePasse);
+        // COMPARER LES MOTS DE PASSE 
+       
         
+        const passwordMatch = await bcrypt.compare(motDePasse, user.motDePasse);
+        
+         console.log(
+            motDePasse,
+            user.motDePasse,
+            passwordMatch
+        );
+
         if (!passwordMatch) {
             return res.status(401).json({ error: 'Identifiants incorrects' });
         }
@@ -80,8 +109,9 @@ exports.login = async (req, res) => {
             { expiresIn: '7d' }
         );
 
+        // Répondre au client
         res.json({
-            message: 'Connexion réussie',
+            message: 'Connexion réussie!',
             user: {
                 id: user._id,
                 nom: user.nom,
@@ -96,15 +126,20 @@ exports.login = async (req, res) => {
     }
 };
 
-// Fonction bch tjib profile mte3 l'utilisateur connecté 
-exports.getProfile = (req, res) => {
-    res.json({
-        user: {
-            id: req.user._id,
-            nom: req.user.nom,
-            login: req.user.login,
-            role: req.user.role,
-            dateCreation: req.user.dateCreation
-        }
-    });
+// Profil utilisateur
+exports.getProfile = async (req, res) => {
+    try {
+        res.json({
+            message: 'Profil utilisateur',
+            user: {
+                id: req.user._id,
+                nom: req.user.nom,
+                login: req.user.login,
+                role: req.user.role,
+                dateCreation: req.user.dateCreation
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
 };
