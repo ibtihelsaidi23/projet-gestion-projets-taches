@@ -113,12 +113,12 @@ exports.getTaskById = async (req, res) => {
 //Mettre à jour une tâche
 exports.updateTask = async (req, res) => {
     try {
-        const { titre, description, statut } = req.body;
+        const { titre, description, statut , utilisateurAssigné } = req.body;
         
         // Vérifier les données
-        if (!titre && !description && !statut) {
-            return res.status(400).json({ error: 'Aucune donnée à mettre à jour' });
-        }
+        // if (!titre && !description && !statut) {
+        //     return res.status(400).json({ error: 'Aucune donnée à mettre à jour' });
+        // }
 
         // Trouver la tâche
         const task = await Task.findById(req.params.id);
@@ -136,6 +136,7 @@ exports.updateTask = async (req, res) => {
         // Mettre à jour les champs autorisés
         if (titre) task.titre = titre;
         if (description) task.description = description;
+        if (utilisateurAssigné) {task.utilisateurAssigné = utilisateurAssigné;}
         if (statut) {
             // Vérifier que le statut est valide
             if (!['todo', 'doing', 'done'].includes(statut)) {
