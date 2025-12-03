@@ -2,6 +2,11 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 require('dotenv').config();
+// Importer les routes jdod auth wel projects 
+const authRoutes = require('./routes/auth');
+const projectRoutes = require('./routes/projects');
+// routes mte3 l tasks
+const taskRoutes = require('./routes/tasks');
 
 const app = express();
 
@@ -19,11 +24,10 @@ app.get('/', (req, res) => {
     res.json({ message: 'API de gestion de projets et tâches' });
 });
 
-// Importer les routes
-const authRoutes = require('./routes/auth');
-const projectRoutes = require('./routes/projects');
+
 app.use('/api/auth', authRoutes);
 app.use('/api/projects', projectRoutes);
+app.use('/api/tasks', taskRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
