@@ -64,22 +64,94 @@ exports.getAllTasks = async (req, res) => {
     try {
         let tasks;
 
-        // Manager voit toutes les tâches
+        // Manager ynajem ychouf kolchy
         if (req.user.role === 'manager') {
             tasks = await Task.find()
                 .populate('projet', 'nom')
-                .populate('utilisateurAssigné', 'nom login')
-                .sort({ dateCreation: -1 });
+                .populate('utilisateurAssigné', 'nom login');
         } 
-        // Utilisateur normal voit ken les tâches mte3ou
+        // Utilisateur normal ychouf ken les tâches mte3ou
         else {
             tasks = await Task.find({ utilisateurAssigné: req.user._id })
                 .populate('projet', 'nom')
-                .populate('utilisateurAssigné', 'nom login')
-                .sort({ dateCreation: -1 });
+                .populate('utilisateurAssigné', 'nom login');
         }
 
-        res.json(tasks);
+        // FILTRAGE SIMPLE
+        // Filtre par statut ( par exemple todo, doing, done )
+        if (req.query.statut) {
+            tasks = tasks.filter(task => task.statut === req.query.statut);
+        }
+
+        // Filtre par projet ID
+        if (req.query.projet) {
+            tasks = tasks.filter(task => 
+                task.projet && task.projet._id.toString() === req.query.projet
+            );
+        }
+
+        // Filtre par titre 
+        if (req.query.titre) {
+            const recherche = req.query.titre.toLowerCase();
+            tasks = tasks.filter(task => 
+                task.titre.toLowerCase().includes(recherche)
+            );
+        }
+
+        // Filtre par deadline (avant une date)
+        if (req.query.deadlineAvant) {
+            const dateLimite = new Date(req.query.deadlineAvant);
+            tasks = tasks.filter(task => 
+                task.deadline && new Date(task.deadline) <= dateLimite
+            );
+        }
+
+        // TRI SIMPLE 
+        if (req.query.tri) {
+            const tri = req.query.tri;
+            
+            // Tri par différents champs
+            // trie bel ordre croissant w décroissant mte3 titre, date de création, deadline w statut
+            if (tri === 'titre') {
+                tasks.sort((a, b) => a.titre.localeCompare(b.titre));
+            }
+            else if (tri === 'titre_desc') {
+                tasks.sort((a, b) => b.titre.localeCompare(a.titre));
+            }
+            else if (tri === 'date') {
+                tasks.sort((a, b) => new Date(a.dateCreation) - new Date(b.dateCreation));
+            }
+            else if (tri === 'date_desc') {
+                tasks.sort((a, b) => new Date(b.dateCreation) - new Date(a.dateCreation));
+            }
+            else if (tri === 'deadline') {
+                tasks.sort((a, b) => {
+                    // Les tâches sans deadline vont à la fin
+                    if (!a.deadline) return 1;
+                    if (!b.deadline) return -1;
+                    return new Date(a.deadline) - new Date(b.deadline);
+                });
+            }
+            else if (tri === 'deadline_desc') {
+                tasks.sort((a, b) => {
+                    if (!a.deadline) return 1;
+                    if (!b.deadline) return -1;
+                    return new Date(b.deadline) - new Date(a.deadline);
+                });
+            }
+            else if (tri === 'statut') {
+                const ordreStatut = { 'todo': 1, 'doing': 2, 'done': 3 };
+                tasks.sort((a, b) => ordreStatut[a.statut] - ordreStatut[b.statut]);
+            }
+        } else {
+            // Tri par défaut : date décroissante
+            tasks.sort((a, b) => new Date(b.dateCreation) - new Date(a.dateCreation));
+        }
+
+        res.json({
+            count: tasks.length,
+            tasks
+        });
 
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -110,15 +182,95 @@ exports.getTaskById = async (req, res) => {
     }
 };
 
+// tjib les tâches par statut avec tri par deadline la plus proche 
+exports.getTasksByStatus = async (req, res) => {
+    try {
+        const { statut } = req.params;
+        
+        // Vérifier que le statut est valide
+        const statutsValides = ['todo', 'doing', 'done'];
+        if (!statutsValides.includes(statut)) {
+            return res.status(400).json({ 
+                error: 'Statut invalide. Valeurs possibles: todo, doing, done' 
+            });
+        }
+
+        let tasks;
+
+        if (req.user.role === 'manager') {
+            tasks = await Task.find({ statut })
+                .populate('projet', 'nom')
+                .populate('utilisateurAssigné', 'nom login');
+        } else {
+            tasks = await Task.find({ 
+                statut,
+                utilisateurAssigné: req.user._id 
+            })
+            .populate('projet', 'nom')
+            .populate('utilisateurAssigné', 'nom login');
+        }
+
+        // Tri par défaut : deadline la plus proche
+        tasks.sort((a, b) => {
+            if (!a.deadline) return 1;
+            if (!b.deadline) return -1;
+            return new Date(a.deadline) - new Date(b.deadline);
+        });
+
+        res.json({
+            statut,
+            count: tasks.length,
+            tasks
+        });
+
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+
+// tjib les Tâches d'un projet spécifique 
+exports.getTasksByProject = async (req, res) => {
+    try {
+        const projectId = req.params.projectId;
+        
+        // Vérifier que le projet existe
+        const project = await Project.findById(projectId);
+        if (!project) {
+            return res.status(404).json({ error: 'Projet non trouvé' });
+        }
+
+        // Vérifier les permissions
+        const isOwner = project.proprietaire.toString() === req.user._id.toString();
+        if (req.user.role !== 'manager' && !isOwner) {
+            return res.status(403).json({ error: 'Accès non autorisé' });
+        }
+
+        // Récupérer les tâches
+        const tasks = await Task.find({ projet: projectId })
+            .populate('utilisateurAssigné', 'nom login')
+            .sort({ dateCreation: -1 });
+
+        res.json({
+            projet: project.nom,
+            count: tasks.length,
+            tasks
+        });
+
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
 //Mettre à jour une tâche
 exports.updateTask = async (req, res) => {
     try {
         const { titre, description, statut , utilisateurAssigné } = req.body;
         
         // Vérifier les données
-        // if (!titre && !description && !statut) {
-        //     return res.status(400).json({ error: 'Aucune donnée à mettre à jour' });
-        // }
+        if (!titre || !description || !statut || !utilisateurAssigné) {
+            return res.status(400).json({ error: 'Aucune donnée à mettre à jour' });
+        }
 
         // Trouver la tâche
         const task = await Task.findById(req.params.id);
@@ -146,7 +298,7 @@ exports.updateTask = async (req, res) => {
         }
 
         // Seul le manager peut changer l'assignation
-        if (req.user.role === 'manager' && req.body.utilisateurAssigné) {
+        if (req.user.role === 'manager' || req.body.utilisateurAssigné) {
             task.utilisateurAssigné = req.body.utilisateurAssigné;
         }
 
@@ -194,67 +346,67 @@ exports.deleteTask = async (req, res) => {
     }
 };
 
-//Tâches d'un projet spécifique
-exports.getTasksByProject = async (req, res) => {
-    try {
-        const projectId = req.params.projectId;
+// //Tâches d'un projet spécifique
+// exports.getTasksByProject = async (req, res) => {
+//     try {
+//         const projectId = req.params.projectId;
         
-        // Vérifier que le projet existe
-        const project = await Project.findById(projectId);
-        if (!project) {
-            return res.status(404).json({ error: 'Projet non trouvé' });
-        }
+//         // Vérifier que le projet existe
+//         const project = await Project.findById(projectId);
+//         if (!project) {
+//             return res.status(404).json({ error: 'Projet non trouvé' });
+//         }
 
-        // Vérifier les permissions
-        const isOwner = project.proprietaire.toString() === req.user._id.toString();
+//         // Vérifier les permissions
+//         const isOwner = project.proprietaire.toString() === req.user._id.toString();
         
-        if (req.user.role !== 'manager' && !isOwner) {
-            return res.status(403).json({ error: 'Accès non autorisé' });
-        }
+//         if (req.user.role !== 'manager' && !isOwner) {
+//             return res.status(403).json({ error: 'Accès non autorisé' });
+//         }
 
-        // Récupérer les tâches du projet
-        const tasks = await Task.find({ projet: projectId })
-            .populate('utilisateurAssigné', 'nom login')
-            .sort({ dateCreation: -1 });
+//         // Récupérer les tâches du projet
+//         const tasks = await Task.find({ projet: projectId })
+//             .populate('utilisateurAssigné', 'nom login')
+//             .sort({ dateCreation: -1 });
 
-        res.json(tasks);
+//         res.json(tasks);
 
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-};
+//     } catch (error) {
+//         res.status(500).json({ error: error.message });
+//     }
+// };
 
-//Tâches par statut
-exports.getTasksByStatus = async (req, res) => {
-    try {
-        const { statut } = req.params;
+// //Tâches par statut
+// exports.getTasksByStatus = async (req, res) => {
+//     try {
+//         const { statut } = req.params;
         
-        // Vérifier que le statut est valide
-        if (!['todo', 'doing', 'done'].includes(statut)) {
-            return res.status(400).json({ error: 'Statut invalide' });
-        }
+//         // Vérifier que le statut est valide
+//         if (!['todo', 'doing', 'done'].includes(statut)) {
+//             return res.status(400).json({ error: 'Statut invalide' });
+//         }
 
-        let tasks;
+//         let tasks;
 
-        if (req.user.role === 'manager') {
-            tasks = await Task.find({ statut })
-                .populate('projet', 'nom')
-                .populate('utilisateurAssigné', 'nom');
-        } else {
-            tasks = await Task.find({ 
-                statut,
-                utilisateurAssigné: req.user._id 
-            })
-            .populate('projet', 'nom')
-            .populate('utilisateurAssigné', 'nom');
-        }
+//         if (req.user.role === 'manager') {
+//             tasks = await Task.find({ statut })
+//                 .populate('projet', 'nom')
+//                 .populate('utilisateurAssigné', 'nom');
+//         } else {
+//             tasks = await Task.find({ 
+//                 statut,
+//                 utilisateurAssigné: req.user._id 
+//             })
+//             .populate('projet', 'nom')
+//             .populate('utilisateurAssigné', 'nom');
+//         }
 
-        res.json(tasks);
+//         res.json(tasks);
 
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-};
+//     } catch (error) {
+//         res.status(500).json({ error: error.message });
+//     }
+// };
 
 // functions sta3mlnehom fel controller mte3 l tasks bch nverifyiw les accès w permissions 
 async function checkTaskAccess(user, task) {

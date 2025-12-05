@@ -31,23 +31,110 @@ exports.createProject = async (req, res) => {
     }
 };
 
-// 2. Récupérer tous les projets 
+// 2. Récupérer tous les projets avec recherche simple fel query ( URL ) w tri simple 
 exports.getAllProjects = async (req, res) => {
-    try {
+  try {
         let projects;
+        let filter = {};
 
-        // Manager voit tous les projets
-        if (req.user.role === 'manager') {
-            projects = await Project.find()
-                .populate('proprietaire', 'nom login')
-                .sort({ dateCreation: -1 });
-        } 
-        // Utilisateur normal ychouf projets mte3ou bark
-        else {
-            projects = await Project.find({ proprietaire: req.user._id })
-                .populate('proprietaire', 'nom login')
-                .sort({ dateCreation: -1 });
+        // Manager voit tous les projets, user voit seulement les siens
+        if (req.user.role !== 'manager') {
+            filter.proprietaire = req.user._id;
         }
+
+        // RECHERCHE SIMPLE par nom (sans regex)
+        if (req.query.nom) {
+            // On récupère tous les projets d'abord, puis on filtre
+            projects = await Project.find(filter)
+                .populate('proprietaire', 'nom login');
+            
+            // Filtrage simple par nom (contient la chaîne)
+            projects = projects.filter(project => 
+                project.nom.toLowerCase().includes(req.query.nom.toLowerCase())
+            );
+        } else {
+            projects = await Project.find(filter)
+                .populate('proprietaire', 'nom login');
+        }
+
+        // TRI SIMPLE
+        if (req.query.tri) {
+            const tri = req.query.tri;
+            
+            if (tri === 'nom') {
+                projects.sort((a, b) => a.nom.localeCompare(b.nom));
+            } 
+            else if (tri === 'nom_desc') {
+                projects.sort((a, b) => b.nom.localeCompare(a.nom));
+            }
+            else if (tri === 'date') {
+                projects.sort((a, b) => new Date(a.dateCreation) - new Date(b.dateCreation));
+            }
+            else if (tri === 'date_desc') {
+                projects.sort((a, b) => new Date(b.dateCreation) - new Date(a.dateCreation));
+            }
+            else if (tri === 'statut') {
+                projects.sort((a, b) => a.statut.localeCompare(b.statut));
+            }
+        } else {
+            // Tri par défaut : date décroissante
+            projects.sort((a, b) => new Date(b.dateCreation) - new Date(a.dateCreation));
+        }
+
+        res.json(projects);
+
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+
+// fonction bch tjib projects selon statut (en cours, terminé, en pause)
+exports.getProjectsByStatus = async (req, res) => {
+    try {
+        const { statut } = req.params;
+        
+        // Vérifier que le statut est valide
+        const statutsValides = ['en cours', 'terminé', 'en pause'];
+        if (!statutsValides.includes(statut)) {
+            return res.status(400).json({ 
+                error: 'Statut invalide. Valeurs possibles: en cours, terminé, en pause' 
+            });
+        }
+
+        let filter = { statut };
+
+        // Manager voit tous, user voit seulement les siens
+        if (req.user.role !== 'manager') {
+            filter.proprietaire = req.user._id;
+        }
+
+        const projects = await Project.find(filter)
+            .populate('proprietaire', 'nom login')
+            .sort({ dateCreation: -1 });
+
+        res.json(projects);
+
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+// fonction bch tjib projects selon proprietaire ( manager seulement peut y accéder )
+exports.getProjectsByOwner = async (req, res) => {
+    try {
+        // Seul le manager peut voir les projets par propriétaire
+        if (req.user.role !== 'manager') {
+            return res.status(403).json({ 
+                error: 'Seul un manager peut rechercher par propriétaire' 
+            });
+        }
+
+        const { proprietaireId } = req.params;
+
+        const projects = await Project.find({ proprietaire: proprietaireId })
+            .populate('proprietaire', 'nom login')
+            .sort({ dateCreation: -1 });
 
         res.json(projects);
 
@@ -147,30 +234,3 @@ exports.deleteProject = async (req, res) => {
     }
 };
 
-// 6. Recherche simple par nom 
-exports.searchProjects = async (req, res) => {
-    try {
-        const { search } = req.query;
-        let projects;
-
-        if (!search) {
-            return res.status(400).json({ error: 'Terme de recherche requis' });
-        }
-
-        if (req.user.role === 'manager') {
-            projects = await Project.find({ 
-                nom: { $regex: search, $options: 'i' } 
-            }).populate('proprietaire', 'nom login');
-        } else {
-            projects = await Project.find({ 
-                proprietaire: req.user._id,
-                nom: { $regex: search, $options: 'i' }
-            }).populate('proprietaire', 'nom login');
-        }
-
-        res.json(projects);
-
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-};
