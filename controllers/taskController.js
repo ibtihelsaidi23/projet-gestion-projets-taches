@@ -346,67 +346,6 @@ exports.deleteTask = async (req, res) => {
     }
 };
 
-// //Tâches d'un projet spécifique
-// exports.getTasksByProject = async (req, res) => {
-//     try {
-//         const projectId = req.params.projectId;
-        
-//         // Vérifier que le projet existe
-//         const project = await Project.findById(projectId);
-//         if (!project) {
-//             return res.status(404).json({ error: 'Projet non trouvé' });
-//         }
-
-//         // Vérifier les permissions
-//         const isOwner = project.proprietaire.toString() === req.user._id.toString();
-        
-//         if (req.user.role !== 'manager' && !isOwner) {
-//             return res.status(403).json({ error: 'Accès non autorisé' });
-//         }
-
-//         // Récupérer les tâches du projet
-//         const tasks = await Task.find({ projet: projectId })
-//             .populate('utilisateurAssigné', 'nom login')
-//             .sort({ dateCreation: -1 });
-
-//         res.json(tasks);
-
-//     } catch (error) {
-//         res.status(500).json({ error: error.message });
-//     }
-// };
-
-// //Tâches par statut
-// exports.getTasksByStatus = async (req, res) => {
-//     try {
-//         const { statut } = req.params;
-        
-//         // Vérifier que le statut est valide
-//         if (!['todo', 'doing', 'done'].includes(statut)) {
-//             return res.status(400).json({ error: 'Statut invalide' });
-//         }
-
-//         let tasks;
-
-//         if (req.user.role === 'manager') {
-//             tasks = await Task.find({ statut })
-//                 .populate('projet', 'nom')
-//                 .populate('utilisateurAssigné', 'nom');
-//         } else {
-//             tasks = await Task.find({ 
-//                 statut,
-//                 utilisateurAssigné: req.user._id 
-//             })
-//             .populate('projet', 'nom')
-//             .populate('utilisateurAssigné', 'nom');
-//         }
-
-//         res.json(tasks);
-
-//     } catch (error) {
-//         res.status(500).json({ error: error.message });
-//     }
-// };
 
 // functions sta3mlnehom fel controller mte3 l tasks bch nverifyiw les accès w permissions 
 async function checkTaskAccess(user, task) {
